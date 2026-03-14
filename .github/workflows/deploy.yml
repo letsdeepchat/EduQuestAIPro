@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # This flag auto-answers "yes" to any "Do you want to install..." prompts
+  # This forces the environment to auto-confirm any "yes/no" prompts
   NPM_CONFIG_YES: true 
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -33,12 +33,14 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        # 'npm ci' is faster and more reliable than 'npm install' in CI/CD
+        # Added auto-yes flag directly to the install step
         run: npm ci || npm install
+        env:
+          npm_config_yes: true
 
       - name: Build
-        # Explicitly calling vite to avoid any webpack confusion
-        run: npx vite build
+        # We use 'npm run build' which is mapped to 'vite build' in your package.json
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
