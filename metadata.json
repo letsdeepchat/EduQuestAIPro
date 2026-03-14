@@ -1,0 +1,8 @@
+{
+  "name": "EduQuestAI Prep",
+  "description": "A comprehensive AI-powered preparation platform for Class 1 to 12 and competitive exams, featuring practice sessions, mock tests, and real-time syllabus research.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}
