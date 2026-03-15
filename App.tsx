@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import SetupScreen from './components/SetupScreen';
 import Dashboard from './components/Dashboard';
 import Quiz from './components/Quiz';
@@ -162,112 +163,114 @@ const App: React.FC = () => {
       hasReviewData={!!reviewData}
       title={syllabus?.title || (prefs?.subject ? `${prefs.examType}: ${prefs.subject}` : prefs?.examType)}
     >
-      {error && (currentView === View.MODEL_SELECT || currentView === View.SETUP) && (
-        <div className="max-w-xl mx-auto mb-6 bg-white border-2 border-red-500 p-6 rounded-3xl shadow-2xl shadow-red-500/10 flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
-          <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/20">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <div className="flex-1 space-y-1">
-            <h3 className="text-lg font-black text-gray-900 tracking-tight">System Error</h3>
-            <p className="text-red-600 text-sm font-bold leading-relaxed">{error}</p>
-          </div>
-          <button 
-            onClick={() => setError(null)}
-            className="p-2 hover:bg-red-50 rounded-xl transition-colors text-red-400 hover:text-red-600"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-      )}
-
-      {currentView === View.MODEL_SELECT && (
-        <ModelSelector onSelect={handleModelSelect} />
-      )}
-
-      {currentView === View.SETUP && (
-        <SetupScreen 
-          onComplete={handleSetupComplete} 
-          onChangeAI={() => setCurrentView(View.MODEL_SELECT)}
-        />
-      )}
-
-      {currentView === View.LOADING && (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-10 animate-in fade-in duration-500">
-          <div className="relative">
-             <div className="w-24 h-24 border-8 border-indigo-50 border-t-indigo-600 rounded-full animate-spin"></div>
-             <div className="absolute inset-0 flex items-center justify-center">
-                <svg className="w-8 h-8 text-indigo-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-             </div>
-          </div>
-          <div className="text-center space-y-4 max-w-md">
-            <h2 className="text-4xl font-black text-gray-900 tracking-tight">AI Research in Progress</h2>
-            <p className="text-gray-500 font-medium leading-relaxed">
-              We are using Google Search to research the official <span className="text-indigo-600 font-bold">{prefs?.examType}</span> {prefs?.className} curriculum for {new Date().getFullYear() - 1}-{new Date().getFullYear().toString().slice(-2)}.
-            </p>
-            <div className="flex justify-center gap-1.5 pt-2">
-              <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-              <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-              <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce"></div>
+      <ErrorBoundary>
+        {error && (currentView === View.MODEL_SELECT || currentView === View.SETUP) && (
+          <div className="max-w-xl mx-auto mb-6 bg-white border-2 border-red-500 p-6 rounded-3xl shadow-2xl shadow-red-500/10 flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
+            <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/20">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1 space-y-1">
+              <h3 className="text-lg font-black text-gray-900 tracking-tight">System Error</h3>
+              <p className="text-red-600 text-sm font-bold leading-relaxed">{error}</p>
             </div>
             <button 
-              onClick={() => setCurrentView(View.SETUP)}
-              className="mt-4 text-xs font-bold text-gray-400 hover:text-indigo-600 underline"
+              onClick={() => setError(null)}
+              className="p-2 hover:bg-red-50 rounded-xl transition-colors text-red-400 hover:text-red-600"
             >
-              Cancel Research
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {currentView === View.DASHBOARD && syllabus && prefs && (
-        <Dashboard 
-          syllabus={syllabus}
-          masteredTopics={masteredTopics}
-          prefs={prefs}
-          onStartPractice={handleStartPractice} 
-          onStartMock={handleStartMock} 
-          onStartInterview={() => setCurrentView(View.INTERVIEW)}
-        />
-      )}
+        {currentView === View.MODEL_SELECT && (
+          <ModelSelector onSelect={handleModelSelect} />
+        )}
 
-      {currentView === View.INTERVIEW && prefs && (
-        <InterviewSession 
-          prefs={prefs}
-          onBack={handleGoHome}
-        />
-      )}
+        {currentView === View.SETUP && (
+          <SetupScreen 
+            onComplete={handleSetupComplete} 
+            onChangeAI={() => setCurrentView(View.MODEL_SELECT)}
+          />
+        )}
 
-      {currentView === View.QUIZ && prefs && (
-        <Quiz 
-          topic={selectedTopic} 
-          prefs={prefs}
-          syllabus={syllabus}
-          isMock={isMockTest} 
-          onComplete={handleQuizComplete}
-          onCancel={handleGoHome}
-        />
-      )}
+        {currentView === View.LOADING && (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-10 animate-in fade-in duration-500">
+            <div className="relative">
+               <div className="w-24 h-24 border-8 border-indigo-50 border-t-indigo-600 rounded-full animate-spin"></div>
+               <div className="absolute inset-0 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-indigo-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+               </div>
+            </div>
+            <div className="text-center space-y-4 max-w-md">
+              <h2 className="text-4xl font-black text-gray-900 tracking-tight">AI Research in Progress</h2>
+              <p className="text-gray-500 font-medium leading-relaxed">
+                We are using Google Search to research the official <span className="text-indigo-600 font-bold">{prefs?.examType}</span> {prefs?.className} curriculum for {new Date().getFullYear() - 1}-{new Date().getFullYear().toString().slice(-2)}.
+              </p>
+              <div className="flex justify-center gap-1.5 pt-2">
+                <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce"></div>
+              </div>
+              <button 
+                onClick={() => setCurrentView(View.SETUP)}
+                className="mt-4 text-xs font-bold text-gray-400 hover:text-indigo-600 underline"
+              >
+                Cancel Research
+              </button>
+            </div>
+          </div>
+        )}
 
-      {currentView === View.RESULT && lastResult && (
-        <ResultScreen 
-          score={lastResult.score} 
-          total={lastResult.total} 
-          syllabus={syllabus}
-          onRestart={() => setCurrentView(View.QUIZ)}
-          onGoHome={handleGoHome}
-          onReview={() => setCurrentView(View.REVIEW)}
-        />
-      )}
+        {currentView === View.DASHBOARD && syllabus && prefs && (
+          <Dashboard 
+            syllabus={syllabus}
+            masteredTopics={masteredTopics}
+            prefs={prefs}
+            onStartPractice={handleStartPractice} 
+            onStartMock={handleStartMock} 
+            onStartInterview={() => setCurrentView(View.INTERVIEW)}
+          />
+        )}
 
-      {currentView === View.REVIEW && reviewData && (
-        <ReviewScreen 
-          questions={reviewData.questions}
-          userAnswers={reviewData.userAnswers}
-          onBack={() => setCurrentView(View.RESULT)}
-        />
-      )}
+        {currentView === View.INTERVIEW && prefs && (
+          <InterviewSession 
+            prefs={prefs}
+            onBack={handleGoHome}
+          />
+        )}
+
+        {currentView === View.QUIZ && prefs && (
+          <Quiz 
+            topic={selectedTopic} 
+            prefs={prefs}
+            syllabus={syllabus}
+            isMock={isMockTest} 
+            onComplete={handleQuizComplete}
+            onCancel={handleGoHome}
+          />
+        )}
+
+        {currentView === View.RESULT && lastResult && (
+          <ResultScreen 
+            score={lastResult.score} 
+            total={lastResult.total} 
+            syllabus={syllabus}
+            onRestart={() => setCurrentView(View.QUIZ)}
+            onGoHome={handleGoHome}
+            onReview={() => setCurrentView(View.REVIEW)}
+          />
+        )}
+
+        {currentView === View.REVIEW && reviewData && (
+          <ReviewScreen 
+            questions={reviewData.questions}
+            userAnswers={reviewData.userAnswers}
+            onBack={() => setCurrentView(View.RESULT)}
+          />
+        )}
+      </ErrorBoundary>
     </Layout>
   );
 };

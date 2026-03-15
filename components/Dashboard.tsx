@@ -148,7 +148,7 @@ const Dashboard: React.FC<DashboardProps> = ({ syllabus, masteredTopics, prefs, 
         </div>
 
         <div className="space-y-24">
-          {syllabus.sections.map((section) => (
+          {syllabus?.sections?.map((section) => (
             <div key={section.name} className="space-y-10">
               <div className="flex items-center gap-6 group">
                 <div className="bg-white p-6 rounded-[2rem] text-5xl shadow-xl border border-gray-100 group-hover:scale-110 transition-transform duration-500">{section.icon}</div>
@@ -159,7 +159,7 @@ const Dashboard: React.FC<DashboardProps> = ({ syllabus, masteredTopics, prefs, 
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {section.topics.map((topic) => {
+                {section?.topics?.map((topic) => {
                   const isMastered = masteredTopics.includes(topic.id);
                   return (
                     <div 

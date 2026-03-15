@@ -36,34 +36,51 @@ const Quiz: React.FC<QuizProps> = ({ topic, prefs, syllabus, isMock, onComplete,
           section: 'Mock' 
         };
         
-        let count = isMock ? 35 : 10;
+        let totalTargetCount = isMock ? 35 : 10;
         
-        // Try to parse total questions from syllabus if it's a mock test
         if (isMock && syllabus?.totalQuestions) {
           const match = syllabus.totalQuestions.match(/\d+/);
           if (match) {
-            const parsedCount = parseInt(match[0], 10);
-            // Limit to a reasonable number for AI generation to avoid timeouts
-            // but respect the user's request for more than 35 if the exam has more.
-            // We'll cap at 50 for stability, but 35 was the previous hardcoded limit.
-            count = Math.min(parsedCount, 50); 
+            totalTargetCount = Math.min(parseInt(match[0], 10), 50); 
           }
         }
 
-        const questions = await generateQuestions(targetTopic, prefs, count);
+        // Initial batch of 10
+        const initialCount = Math.min(totalTargetCount, 10);
+        const initialQuestions = await generateQuestions(targetTopic, prefs, initialCount);
 
         setState({
-          questions,
+          questions: initialQuestions,
           currentIndex: 0,
           score: 0,
-          userAnswers: Array(questions.length).fill(null),
+          userAnswers: Array(initialQuestions.length).fill(null),
           isComplete: false,
           startTime: Date.now()
         });
+        setLoading(false);
+
+        // Background generation for the rest
+        if (totalTargetCount > initialCount) {
+          const remainingCount = totalTargetCount - initialCount;
+          generateQuestions(targetTopic, prefs, remainingCount).then(moreQuestions => {
+            setState(prev => {
+              if (!prev || prev.isComplete) return prev;
+              const newQuestions = [...prev.questions, ...moreQuestions];
+              const newUserAnswers = [...prev.userAnswers, ...Array(moreQuestions.length).fill(null)];
+              return {
+                ...prev,
+                questions: newQuestions,
+                userAnswers: newUserAnswers
+              };
+            });
+          }).catch(err => {
+            console.error("Background question generation failed:", err);
+            // We don't set error here because we already have initial questions
+          });
+        }
       } catch (err) {
         console.error(err);
         setError(formatError(err));
-      } finally {
         setLoading(false);
       }
     }

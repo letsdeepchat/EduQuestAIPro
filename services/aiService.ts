@@ -11,13 +11,30 @@ export const extractJSON = (text: string) => {
     return JSON.parse(text);
   } catch (e) {
     // Try to find JSON block
-    const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    let cleanedText = text.trim();
+    
+    // Remove markdown code blocks if present
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.replace(/^```json\n?/, "").replace(/\n?```$/, "");
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.replace(/^```\n?/, "").replace(/\n?```$/, "");
+    }
+
+    const match = cleanedText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
     if (match) {
       try {
         return JSON.parse(match[0]);
       } catch (e2) {
-        console.error("Failed to parse extracted JSON:", e2);
-        throw new Error("Invalid JSON structure in AI response");
+        // One last attempt: try to fix trailing commas or common issues
+        try {
+          const fixed = match[0]
+            .replace(/,\s*([\]\}])/g, '$1') // remove trailing commas
+            .replace(/(\w+):/g, '"$1":'); // quote unquoted keys
+          return JSON.parse(fixed);
+        } catch (e3) {
+          console.error("Failed to parse extracted JSON:", e2);
+          throw new Error("Invalid JSON structure in AI response");
+        }
       }
     }
     throw new Error("No JSON found in AI response");
@@ -97,19 +114,22 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
   1. A specific title reflecting the exam, class, and year.
   2. A summary of the latest marking scheme or exam changes found.
   3. Total Questions (e.g., "100 Questions").
-  4. Total Marks for the exam (e.g., "300 Marks").
-  5. Negative Marking details (e.g., "-1/4 for wrong answers").
+  4. Total Marks for the exam (e.g., "400 Marks").
+  5. Negative Marking details (e.g., "-1 per wrong answer").
   6. Cutoff Trends: Provide the latest expected or previous year's cutoff marks.
   7. Exam Pattern: Briefly describe the structure (e.g., "Objective MCQ, 3 Sections").
-  8. Rank Analysis: Provide a concise summary of AIR (All India Rank), State Rank, or Global Percentile trends from the last 3 years (e.g., "To reach Top 100 AIR, a score of 280+ was needed in 2023").
+  8. Rank Analysis: Provide a concise summary of AIR (All India Rank), State Rank, or Global Percentile trends from the last 3 years (e.g., "To reach Top 100 AIR, a score of 320+ was needed in 2023").
   9. A breakdown of 5-7 core units/modules as they appear in the latest official syllabus.
   10. 3-4 specific topics per unit.
   11. A concise, high-impact "Mastery Study Plan" (3-4 sentences) for this specific exam.
   12. Interview Eligibility: Determine if this exam has a personality test, interview, or document verification stage.
 
-  IMPORTANT:
+  CRITICAL INSTRUCTIONS:
+  - DO NOT use "N/A", "Varies", "TBD", or "Not Found".
+  - If exact data is not found via search, use your expert internal knowledge to provide the most realistic ESTIMATE based on standard patterns for this specific exam type.
+  - DEFAULT PATTERN IF UNKNOWN: 100 Questions, 400 Marks (4 per correct), -1 Negative Marking.
+  - RANK ANALYSIS: This is MANDATORY for the scorecard logic. Provide a realistic score-to-rank mapping based on historical data.
   - Translate everything accurately into ${prefs.language}.
-  - Ensure the syllabus is tailored to the specific combination of ${prefs.examType}, ${prefs.className}, and ${prefs.language}.
   - Use ONLY valid JSON.`;
 
   if (config.provider === 'google') {
@@ -221,12 +241,12 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         return {
           title: `${prefs.examType} - Standard Syllabus`,
           examInfo: `General information for ${prefs.examType} examination.`,
-          totalQuestions: "Varies",
-          totalMarks: "Varies",
-          negativeMarking: "Check official notification",
-          cutoff: "Varies by year",
-          examPattern: "Standard competitive exam pattern",
-          rankAnalysis: "Competitive",
+          totalQuestions: "100 Questions",
+          totalMarks: "400 Marks",
+          negativeMarking: "-1 for wrong answers",
+          cutoff: "75% of total marks",
+          examPattern: "100 MCQs, 4 marks each, -1 negative marking",
+          rankAnalysis: "Top 1% usually scores above 350/400. Top 10% scores above 300/400.",
           hasInterview: false,
           sections: [
             {
@@ -246,14 +266,30 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         };
       }
       
-      return { ...fallbackData, sources: [] };
+      // Sanitize N/A values in fallbackData
+      const sanitized = { ...fallbackData };
+      if (!sanitized.totalQuestions || (typeof sanitized.totalQuestions === 'string' && sanitized.totalQuestions.includes("N/A"))) sanitized.totalQuestions = "100 Questions";
+      if (!sanitized.totalMarks || (typeof sanitized.totalMarks === 'string' && sanitized.totalMarks.includes("N/A"))) sanitized.totalMarks = "400 Marks";
+      if (!sanitized.negativeMarking || (typeof sanitized.negativeMarking === 'string' && sanitized.negativeMarking.includes("N/A"))) sanitized.negativeMarking = "-1 for wrong answers";
+      if (!sanitized.rankAnalysis || (typeof sanitized.rankAnalysis === 'string' && sanitized.rankAnalysis.includes("N/A"))) sanitized.rankAnalysis = "Competitive ranking based on score distribution.";
+      if (!sanitized.sections) sanitized.sections = [];
+      
+      return { ...sanitized, sources: [] };
     }
+
+    // Sanitize N/A values in main data
+    const sanitizedData = { ...data };
+    if (!sanitizedData.totalQuestions || (typeof sanitizedData.totalQuestions === 'string' && sanitizedData.totalQuestions.includes("N/A"))) sanitizedData.totalQuestions = "100 Questions";
+    if (!sanitizedData.totalMarks || (typeof sanitizedData.totalMarks === 'string' && sanitizedData.totalMarks.includes("N/A"))) sanitizedData.totalMarks = "400 Marks";
+    if (!sanitizedData.negativeMarking || (typeof sanitizedData.negativeMarking === 'string' && sanitizedData.negativeMarking.includes("N/A"))) sanitizedData.negativeMarking = "-1 for wrong answers";
+    if (!sanitizedData.rankAnalysis || (typeof sanitizedData.rankAnalysis === 'string' && sanitizedData.rankAnalysis.includes("N/A"))) sanitizedData.rankAnalysis = "Competitive ranking based on score distribution.";
+    if (!sanitizedData.sections) sanitizedData.sections = [];
 
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.map(chunk => ({ title: chunk.web?.title || 'Source', uri: chunk.web?.uri || '' }))
-      .filter(s => s.uri);
+      .filter(s => s.uri) || [];
     
-    return { ...data, sources };
+    return { ...sanitizedData, sources };
   } else {
     let client;
     if (config.provider === 'openai') {
@@ -275,18 +311,27 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         return {
           title: `${prefs.examType} - Syllabus`,
           examInfo: `Information for ${prefs.examType}.`,
-          totalQuestions: "N/A",
-          totalMarks: "N/A",
-          negativeMarking: "N/A",
-          cutoff: "N/A",
-          examPattern: "N/A",
-          rankAnalysis: "N/A",
+          totalQuestions: "100 Questions",
+          totalMarks: "400 Marks",
+          negativeMarking: "-1 for wrong answers",
+          cutoff: "75% of total marks",
+          examPattern: "100 MCQs, 4 marks each, -1 negative marking",
+          rankAnalysis: "Top 1% usually scores above 350/400. Top 10% scores above 300/400.",
           hasInterview: false,
           sections: [{ name: "General Studies", icon: "Book", description: "Core subjects", topics: [{ id: "gs-1", name: "Introduction", description: "Basic concepts", section: "General Studies" }] }],
           sources: []
         };
       }
-      return data;
+      
+      // Sanitize N/A values
+      const sanitized = { ...data };
+      if (!sanitized.totalQuestions || (typeof sanitized.totalQuestions === 'string' && sanitized.totalQuestions.includes("N/A"))) sanitized.totalQuestions = "100 Questions";
+      if (!sanitized.totalMarks || (typeof sanitized.totalMarks === 'string' && sanitized.totalMarks.includes("N/A"))) sanitized.totalMarks = "400 Marks";
+      if (!sanitized.negativeMarking || (typeof sanitized.negativeMarking === 'string' && sanitized.negativeMarking.includes("N/A"))) sanitized.negativeMarking = "-1 for wrong answers";
+      if (!sanitized.rankAnalysis || (typeof sanitized.rankAnalysis === 'string' && sanitized.rankAnalysis.includes("N/A"))) sanitized.rankAnalysis = "Competitive ranking based on score distribution.";
+      if (!sanitized.sections) sanitized.sections = [];
+      
+      return { ...sanitized, sources: [] };
     } else if (config.provider === 'deepseek') {
       client = new OpenAI({ 
         apiKey: config.apiKey, 
@@ -305,18 +350,27 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         return {
           title: `${prefs.examType} - Syllabus`,
           examInfo: `Information for ${prefs.examType}.`,
-          totalQuestions: "N/A",
-          totalMarks: "N/A",
-          negativeMarking: "N/A",
-          cutoff: "N/A",
-          examPattern: "N/A",
-          rankAnalysis: "N/A",
+          totalQuestions: "100 Questions",
+          totalMarks: "400 Marks",
+          negativeMarking: "-1 for wrong answers",
+          cutoff: "75% of total marks",
+          examPattern: "100 MCQs, 4 marks each, -1 negative marking",
+          rankAnalysis: "Top 1% usually scores above 350/400. Top 10% scores above 300/400.",
           hasInterview: false,
           sections: [{ name: "General Studies", icon: "Book", description: "Core subjects", topics: [{ id: "gs-1", name: "Introduction", description: "Basic concepts", section: "General Studies" }] }],
           sources: []
         };
       }
-      return data;
+      
+      // Sanitize N/A values
+      const sanitized = { ...data };
+      if (!sanitized.totalQuestions || (typeof sanitized.totalQuestions === 'string' && sanitized.totalQuestions.includes("N/A"))) sanitized.totalQuestions = "100 Questions";
+      if (!sanitized.totalMarks || (typeof sanitized.totalMarks === 'string' && sanitized.totalMarks.includes("N/A"))) sanitized.totalMarks = "400 Marks";
+      if (!sanitized.negativeMarking || (typeof sanitized.negativeMarking === 'string' && sanitized.negativeMarking.includes("N/A"))) sanitized.negativeMarking = "-1 for wrong answers";
+      if (!sanitized.rankAnalysis || (typeof sanitized.rankAnalysis === 'string' && sanitized.rankAnalysis.includes("N/A"))) sanitized.rankAnalysis = "Competitive ranking based on score distribution.";
+      if (!sanitized.sections) sanitized.sections = [];
+      
+      return { ...sanitized, sources: [] };
     } else if (config.provider === 'meta') {
       client = new OpenAI({ 
         apiKey: config.apiKey, 
@@ -337,12 +391,12 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         return {
           title: `${prefs.examType} - Syllabus`,
           examInfo: `Information for ${prefs.examType}.`,
-          totalQuestions: "N/A",
-          totalMarks: "N/A",
-          negativeMarking: "N/A",
-          cutoff: "N/A",
-          examPattern: "N/A",
-          rankAnalysis: "N/A",
+          totalQuestions: "100 Questions",
+          totalMarks: "400 Marks",
+          negativeMarking: "-1 for wrong answers",
+          cutoff: "75% of total marks",
+          examPattern: "100 MCQs, 4 marks each, -1 negative marking",
+          rankAnalysis: "Top 1% usually scores above 350/400. Top 10% scores above 300/400.",
           hasInterview: false,
           sections: [
             {
@@ -355,7 +409,16 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
           sources: []
         };
       }
-      return data;
+      
+      // Sanitize N/A values
+      const sanitized = { ...data };
+      if (!sanitized.totalQuestions || (typeof sanitized.totalQuestions === 'string' && sanitized.totalQuestions.includes("N/A"))) sanitized.totalQuestions = "100 Questions";
+      if (!sanitized.totalMarks || (typeof sanitized.totalMarks === 'string' && sanitized.totalMarks.includes("N/A"))) sanitized.totalMarks = "400 Marks";
+      if (!sanitized.negativeMarking || (typeof sanitized.negativeMarking === 'string' && sanitized.negativeMarking.includes("N/A"))) sanitized.negativeMarking = "-1 for wrong answers";
+      if (!sanitized.rankAnalysis || (typeof sanitized.rankAnalysis === 'string' && sanitized.rankAnalysis.includes("N/A"))) sanitized.rankAnalysis = "Competitive ranking based on score distribution.";
+      if (!sanitized.sections) sanitized.sections = [];
+      
+      return { ...sanitized, sources: [] };
     }
   }
 
