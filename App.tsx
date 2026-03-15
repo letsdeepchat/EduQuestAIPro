@@ -9,7 +9,7 @@ import ReviewScreen from './components/ReviewScreen';
 import InterviewSession from './components/InterviewSession';
 import ModelSelector from './components/ModelSelector';
 import { Topic, Question, ReviewData, UserPreferences, SyllabusData, AIConfig } from './types';
-import { fetchDynamicSyllabus } from './services/aiService';
+import { fetchDynamicSyllabus, formatError } from './services/aiService';
 
 enum View {
   MODEL_SELECT,
@@ -91,13 +91,12 @@ const App: React.FC = () => {
       setCurrentView(View.DASHBOARD);
     } catch (err: any) {
       console.error("Research failed:", err);
-      let errorMessage = err.message || "Failed to research syllabus. Please try again.";
+      const errorMessage = formatError(err);
       
       if (err.message?.includes("entity was not found") || err.message?.includes("API key")) {
         if (window.aistudio?.openSelectKey) {
           await window.aistudio.openSelectKey();
         }
-        errorMessage = "API Key selection required for this model. Please select a valid paid project key.";
       }
       
       setError(errorMessage);
@@ -164,16 +163,21 @@ const App: React.FC = () => {
       title={syllabus?.title || (prefs?.subject ? `${prefs.examType}: ${prefs.subject}` : prefs?.examType)}
     >
       {error && (currentView === View.MODEL_SELECT || currentView === View.SETUP) && (
-        <div className="max-w-xl mx-auto mb-4 bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
-          <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <div className="max-w-xl mx-auto mb-6 bg-white border-2 border-red-500 p-6 rounded-3xl shadow-2xl shadow-red-500/10 flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
+          <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/20">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
           </div>
-          <p className="text-red-700 text-sm font-bold">{error}</p>
+          <div className="flex-1 space-y-1">
+            <h3 className="text-lg font-black text-gray-900 tracking-tight">System Error</h3>
+            <p className="text-red-600 text-sm font-bold leading-relaxed">{error}</p>
+          </div>
           <button 
             onClick={() => setError(null)}
-            className="ml-auto text-red-400 hover:text-red-600"
+            className="p-2 hover:bg-red-50 rounded-xl transition-colors text-red-400 hover:text-red-600"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
       )}

@@ -3,7 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { Mistral } from "@mistralai/mistralai";
 import { UserPreferences } from '../types';
+import { formatError } from '../services/aiService';
 
 interface Message {
   role: 'user' | 'model';
@@ -177,6 +179,8 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({ prefs, onBack }) =>
         chatRef.current = new OpenAI({ apiKey: aiConfig.apiKey, dangerouslyAllowBrowser: true });
       } else if (aiConfig.provider === 'anthropic') {
         chatRef.current = new Anthropic({ apiKey: aiConfig.apiKey, dangerouslyAllowBrowser: true });
+      } else if (aiConfig.provider === 'mistral') {
+        chatRef.current = new Mistral({ apiKey: aiConfig.apiKey });
       }
       
       setIsLoading(false);
@@ -210,12 +214,23 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({ prefs, onBack }) =>
           messages: [{ role: 'user', content: "Start the interview now." }]
         });
         text = (response.content[0] as any).text;
+      } else if (aiConfig?.provider === 'mistral') {
+        const response = await chatRef.current.chat.complete({
+          model: aiConfig.model,
+          messages: [
+            { role: 'system', content: `You are an expert interviewer for the ${prefs.examType} examination. All your responses MUST be in ${prefs.language}.` },
+            { role: 'user', content: "Start the interview now." }
+          ]
+        });
+        text = response.choices[0].message.content as string;
       }
       
       setMessages([{ role: 'model', text }]);
       await speak(text);
     } catch (err) {
       console.error("Chat start failed:", err);
+      const formatted = formatError(err);
+      setMessages([{ role: 'model', text: `System Error: ${formatted}` }]);
     } finally {
       setIsLoading(false);
     }
@@ -256,6 +271,17 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({ prefs, onBack }) =>
           messages: [...history, { role: 'user', content: finalMsg }] as any
         });
         text = (response.content[0] as any).text;
+      } else if (aiConfig?.provider === 'mistral') {
+        const history = messages.map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.text }));
+        const response = await chatRef.current.chat.complete({
+          model: aiConfig.model,
+          messages: [
+            { role: 'system', content: `You are an expert interviewer for the ${prefs.examType} examination. All your responses MUST be in ${prefs.language}.` },
+            ...history,
+            { role: 'user', content: finalMsg }
+          ] as any
+        });
+        text = response.choices[0].message.content as string;
       }
 
       setMessages(prev => [...prev, { role: 'model', text }]);
@@ -263,7 +289,8 @@ const InterviewSession: React.FC<InterviewSessionProps> = ({ prefs, onBack }) =>
       await speak(text);
     } catch (err) {
       console.error("Message failed:", err);
-      setMessages(prev => [...prev, { role: 'model', text: "I apologize, I encountered a technical issue. Could you please repeat that?" }]);
+      const formatted = formatError(err);
+      setMessages(prev => [...prev, { role: 'model', text: `System Error: ${formatted}` }]);
     } finally {
       setIsLoading(false);
     }

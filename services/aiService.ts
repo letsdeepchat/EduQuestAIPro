@@ -2,6 +2,7 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { Mistral } from "@mistralai/mistralai";
 import { Question, Topic, UserPreferences, SyllabusData, AIConfig } from "../types";
 
 export const extractJSON = (text: string) => {
@@ -21,6 +22,59 @@ export const extractJSON = (text: string) => {
     }
     throw new Error("No JSON found in AI response");
   }
+};
+
+export const formatError = (error: any): string => {
+  if (!error) return "An unknown error occurred.";
+  
+  let errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
+  
+  // Try to parse if it's a JSON string
+  try {
+    const parsed = typeof errorMsg === 'string' ? JSON.parse(errorMsg) : errorMsg;
+    
+    // Handle Gemini/Google API error structure
+    if (parsed.error) {
+      const code = parsed.error.code;
+      const message = parsed.error.message || "";
+      
+      if (code === 429 || message.includes("quota")) {
+        return "Quota Exceeded: You have reached the limit for this AI model. Please try again later or switch to a different model/API key.";
+      }
+      if (code === 401 || code === 403 || message.includes("API key")) {
+        return "Authentication Error: Your API key is invalid or has expired. Please check your AI Core settings.";
+      }
+      return message || errorMsg;
+    }
+
+    // Handle OpenAI error structure
+    if (parsed.error && typeof parsed.error === 'object') {
+      return parsed.error.message || errorMsg;
+    }
+  } catch (e) {
+    // Not JSON or failed to parse, continue with string checks
+  }
+
+  // Fallback string-based checks
+  const lowerMsg = errorMsg.toLowerCase();
+  
+  if (lowerMsg.includes("quota") || lowerMsg.includes("429") || lowerMsg.includes("limit exceeded")) {
+    return "Quota Exceeded: You have reached the limit for this AI model. Please try again later or switch to a different model/API key.";
+  }
+  
+  if (lowerMsg.includes("api key") || lowerMsg.includes("401") || lowerMsg.includes("403") || lowerMsg.includes("unauthorized")) {
+    return "Authentication Error: Your API key is invalid or has expired. Please check your AI Core settings.";
+  }
+
+  if (lowerMsg.includes("entity was not found") || lowerMsg.includes("not found")) {
+    return "Resource Not Found: The requested AI resource or project was not found. Please check your settings.";
+  }
+
+  if (lowerMsg.includes("network") || lowerMsg.includes("fetch") || lowerMsg.includes("failed to execute")) {
+    return "Network Error: Could not connect to the AI service. Please check your internet connection.";
+  }
+
+  return errorMsg;
 };
 
 export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<SyllabusData> {
@@ -110,6 +164,91 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
     });
 
     const data = extractJSON(response.text || '{}');
+    
+    // FALLBACK: If search failed to provide sections, try again without search grounding
+    if (!data.sections || data.sections.length === 0) {
+      console.warn("Search grounding failed to find syllabus sections, falling back to general knowledge.");
+      const fallbackResponse = await ai.models.generateContent({
+        model: config.model,
+        contents: prompt + "\nNOTE: If you couldn't find specific web results, use your internal knowledge to generate a standard, realistic syllabus for this exam.",
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              examInfo: { type: Type.STRING },
+              studyPlan: { type: Type.STRING },
+              totalQuestions: { type: Type.STRING },
+              totalMarks: { type: Type.STRING },
+              negativeMarking: { type: Type.STRING },
+              cutoff: { type: Type.STRING },
+              examPattern: { type: Type.STRING },
+              rankAnalysis: { type: Type.STRING },
+              hasInterview: { type: Type.BOOLEAN },
+              sections: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    icon: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    topics: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          id: { type: Type.STRING },
+                          name: { type: Type.STRING },
+                          description: { type: Type.STRING },
+                          section: { type: Type.STRING }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            required: ['title', 'examInfo', 'sections', 'totalMarks', 'negativeMarking', 'rankAnalysis', 'totalQuestions', 'cutoff', 'examPattern']
+          }
+        }
+      });
+      const fallbackData = extractJSON(fallbackResponse.text || '{}');
+      
+      // FINAL CATCH-ALL: If even fallback has no sections, return a generic structure
+      if (!fallbackData.sections || fallbackData.sections.length === 0) {
+        return {
+          title: `${prefs.examType} - Standard Syllabus`,
+          examInfo: `General information for ${prefs.examType} examination.`,
+          totalQuestions: "Varies",
+          totalMarks: "Varies",
+          negativeMarking: "Check official notification",
+          cutoff: "Varies by year",
+          examPattern: "Standard competitive exam pattern",
+          rankAnalysis: "Competitive",
+          hasInterview: false,
+          sections: [
+            {
+              name: "General Awareness",
+              icon: "Globe",
+              description: "Current affairs and general knowledge",
+              topics: [{ id: "ga-1", name: "Current Events", description: "National and International importance", section: "General Awareness" }]
+            },
+            {
+              name: "Quantitative Aptitude",
+              icon: "Calculator",
+              description: "Mathematical and numerical ability",
+              topics: [{ id: "qa-1", name: "Arithmetic", description: "Basic calculations and logic", section: "Quantitative Aptitude" }]
+            }
+          ],
+          sources: []
+        };
+      }
+      
+      return { ...fallbackData, sources: [] };
+    }
+
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.map(chunk => ({ title: chunk.web?.title || 'Source', uri: chunk.web?.uri || '' }))
       .filter(s => s.uri);
@@ -131,7 +270,23 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         messages: [{ role: 'user', content: prompt + "\nReturn ONLY JSON." }]
       });
       const text = (response.content[0] as any).text;
-      return extractJSON(text || '{}');
+      const data = extractJSON(text || '{}');
+      if (!data.sections || data.sections.length === 0) {
+        return {
+          title: `${prefs.examType} - Syllabus`,
+          examInfo: `Information for ${prefs.examType}.`,
+          totalQuestions: "N/A",
+          totalMarks: "N/A",
+          negativeMarking: "N/A",
+          cutoff: "N/A",
+          examPattern: "N/A",
+          rankAnalysis: "N/A",
+          hasInterview: false,
+          sections: [{ name: "General Studies", icon: "Book", description: "Core subjects", topics: [{ id: "gs-1", name: "Introduction", description: "Basic concepts", section: "General Studies" }] }],
+          sources: []
+        };
+      }
+      return data;
     } else if (config.provider === 'deepseek') {
       client = new OpenAI({ 
         apiKey: config.apiKey, 
@@ -139,11 +294,29 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         dangerouslyAllowBrowser: true 
       });
     } else if (config.provider === 'mistral') {
-      client = new OpenAI({ 
-        apiKey: config.apiKey, 
-        baseURL: 'https://api.mistral.ai/v1',
-        dangerouslyAllowBrowser: true 
+      const mistral = new Mistral({ apiKey: config.apiKey });
+      const response = await mistral.chat.complete({
+        model: config.model,
+        messages: [{ role: 'user', content: prompt + "\nReturn ONLY JSON." }],
+        responseFormat: { type: 'json_object' }
       });
+      const data = extractJSON(response.choices?.[0]?.message?.content as string || '{}');
+      if (!data.sections || data.sections.length === 0) {
+        return {
+          title: `${prefs.examType} - Syllabus`,
+          examInfo: `Information for ${prefs.examType}.`,
+          totalQuestions: "N/A",
+          totalMarks: "N/A",
+          negativeMarking: "N/A",
+          cutoff: "N/A",
+          examPattern: "N/A",
+          rankAnalysis: "N/A",
+          hasInterview: false,
+          sections: [{ name: "General Studies", icon: "Book", description: "Core subjects", topics: [{ id: "gs-1", name: "Introduction", description: "Basic concepts", section: "General Studies" }] }],
+          sources: []
+        };
+      }
+      return data;
     } else if (config.provider === 'meta') {
       client = new OpenAI({ 
         apiKey: config.apiKey, 
@@ -158,7 +331,31 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
         messages: [{ role: 'user', content: prompt + "\nReturn ONLY JSON." }],
         response_format: { type: 'json_object' }
       });
-      return extractJSON(response.choices[0].message.content || '{}');
+      const data = extractJSON(response.choices[0].message.content || '{}');
+      
+      if (!data.sections || data.sections.length === 0) {
+        return {
+          title: `${prefs.examType} - Syllabus`,
+          examInfo: `Information for ${prefs.examType}.`,
+          totalQuestions: "N/A",
+          totalMarks: "N/A",
+          negativeMarking: "N/A",
+          cutoff: "N/A",
+          examPattern: "N/A",
+          rankAnalysis: "N/A",
+          hasInterview: false,
+          sections: [
+            {
+              name: "General Studies",
+              icon: "Book",
+              description: "Core subjects",
+              topics: [{ id: "gs-1", name: "Introduction", description: "Basic concepts", section: "General Studies" }]
+            }
+          ],
+          sources: []
+        };
+      }
+      return data;
     }
   }
 
@@ -247,11 +444,14 @@ export async function generateQuestions(
         dangerouslyAllowBrowser: true 
       });
     } else if (config.provider === 'mistral') {
-      client = new OpenAI({ 
-        apiKey: config.apiKey, 
-        baseURL: 'https://api.mistral.ai/v1',
-        dangerouslyAllowBrowser: true 
+      const mistral = new Mistral({ apiKey: config.apiKey });
+      const response = await mistral.chat.complete({
+        model: config.model,
+        messages: [{ role: 'user', content: prompt + "\nReturn ONLY JSON array." }],
+        responseFormat: { type: 'json_object' }
       });
+      const result = extractJSON(response.choices?.[0]?.message?.content as string || '{}');
+      questions = Array.isArray(result) ? result : (result.questions || []);
     } else if (config.provider === 'meta') {
       client = new OpenAI({ 
         apiKey: config.apiKey, 

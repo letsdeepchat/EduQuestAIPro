@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, QuizState, Topic, UserPreferences, SyllabusData } from '../types';
-import { generateQuestions } from '../services/aiService';
+import { generateQuestions, formatError } from '../services/aiService';
 
 interface QuizProps {
   topic?: Topic;
@@ -14,6 +14,7 @@ interface QuizProps {
 
 const Quiz: React.FC<QuizProps> = ({ topic, prefs, syllabus, isMock, onComplete, onCancel }) => {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<QuizState | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [totalTimeLeft, setTotalTimeLeft] = useState(isMock ? 3600 : 900);
@@ -26,6 +27,7 @@ const Quiz: React.FC<QuizProps> = ({ topic, prefs, syllabus, isMock, onComplete,
   useEffect(() => {
     async function loadQuestions() {
       setLoading(true);
+      setError(null);
       try {
         const targetTopic = topic || { 
           id: 'full-mock', 
@@ -60,6 +62,7 @@ const Quiz: React.FC<QuizProps> = ({ topic, prefs, syllabus, isMock, onComplete,
         });
       } catch (err) {
         console.error(err);
+        setError(formatError(err));
       } finally {
         setLoading(false);
       }
@@ -139,10 +142,40 @@ const Quiz: React.FC<QuizProps> = ({ topic, prefs, syllabus, isMock, onComplete,
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center space-y-8 animate-in fade-in duration-500">
+        <div className="w-20 h-20 rounded-3xl bg-red-500 flex items-center justify-center shadow-2xl shadow-red-500/20">
+          <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <div className="space-y-3 max-w-md">
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight">Generation Failed</h2>
+          <p className="text-red-600 font-bold leading-relaxed">{error}</p>
+        </div>
+        <div className="flex gap-4">
+          <button 
+            onClick={onCancel} 
+            className="px-8 py-3 bg-gray-100 text-gray-600 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all"
+          >
+            Go Back
+          </button>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-indigo-500/25 hover:scale-105 transition-all"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!state || state.questions.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-500 mb-4 font-bold">Failed to load content. Try again.</p>
+        <p className="text-red-500 mb-4 font-bold">No questions were generated. Please try again.</p>
         <button onClick={onCancel} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold">Back</button>
       </div>
     );
