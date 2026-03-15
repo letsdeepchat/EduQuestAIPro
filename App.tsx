@@ -45,6 +45,10 @@ const App: React.FC = () => {
 
   const checkAndSelectKey = async () => {
     try {
+      if (!window.aistudio?.hasSelectedApiKey || !window.aistudio?.openSelectKey) {
+        console.warn("AI Studio key selection methods not available in this environment.");
+        return true;
+      }
       const hasKey = await window.aistudio.hasSelectedApiKey();
       if (!hasKey) {
         await window.aistudio.openSelectKey();
@@ -67,10 +71,12 @@ const App: React.FC = () => {
     setPrefs(finalPrefs);
     
     // If using Google, ensure API Key is selected
-    if (aiConfig?.provider === 'google') {
+    const isProModel = aiConfig?.model?.toLowerCase().includes('pro');
+    if (aiConfig?.provider === 'google' && isProModel) {
       const keyReady = await checkAndSelectKey();
       if (!keyReady) {
-        setError("API Key selection is required for research features.");
+        setError("API Key selection is required for Pro models.");
+        setCurrentView(View.MODEL_SELECT);
         return;
       }
     }
@@ -85,13 +91,17 @@ const App: React.FC = () => {
       setCurrentView(View.DASHBOARD);
     } catch (err: any) {
       console.error("Research failed:", err);
-      if (err.message?.includes("entity was not found")) {
-        await window.aistudio.openSelectKey();
-        setError("Your project was not found. Please select a valid paid project key.");
-      } else {
-        setError(err.message || "Failed to research syllabus. Please try again.");
+      let errorMessage = err.message || "Failed to research syllabus. Please try again.";
+      
+      if (err.message?.includes("entity was not found") || err.message?.includes("API key")) {
+        if (window.aistudio?.openSelectKey) {
+          await window.aistudio.openSelectKey();
+        }
+        errorMessage = "API Key selection required for this model. Please select a valid paid project key.";
       }
-      setCurrentView(View.SETUP);
+      
+      setError(errorMessage);
+      setCurrentView(View.MODEL_SELECT);
     }
   };
 
@@ -153,28 +163,30 @@ const App: React.FC = () => {
       hasReviewData={!!reviewData}
       title={syllabus?.title || (prefs?.subject ? `${prefs.examType}: ${prefs.subject}` : prefs?.examType)}
     >
+      {error && (currentView === View.MODEL_SELECT || currentView === View.SETUP) && (
+        <div className="max-w-xl mx-auto mb-4 bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
+          <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+          <p className="text-red-700 text-sm font-bold">{error}</p>
+          <button 
+            onClick={() => setError(null)}
+            className="ml-auto text-red-400 hover:text-red-600"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
       {currentView === View.MODEL_SELECT && (
         <ModelSelector onSelect={handleModelSelect} />
       )}
 
       {currentView === View.SETUP && (
-        <>
-          {error && (
-            <div className="max-w-xl mx-auto mb-4 bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in">
-              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </div>
-              <p className="text-red-700 text-sm font-bold">{error}</p>
-              <button 
-                onClick={() => setError(null)}
-                className="ml-auto text-red-400 hover:text-red-600"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-          )}
-          <SetupScreen onComplete={handleSetupComplete} />
-        </>
+        <SetupScreen 
+          onComplete={handleSetupComplete} 
+          onChangeAI={() => setCurrentView(View.MODEL_SELECT)}
+        />
       )}
 
       {currentView === View.LOADING && (

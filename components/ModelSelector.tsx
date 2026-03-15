@@ -13,12 +13,20 @@ interface ModelSelectorProps {
   onSelect: (config: AIConfig) => void;
 }
 
-const PROVIDERS: { id: AIProvider; name: string; icon: any; color: string; models: { id: string; name: string; desc: string }[] }[] = [
+const PROVIDERS: { 
+  id: AIProvider; 
+  name: string; 
+  icon: any; 
+  color: string; 
+  keyUrl: string;
+  models: { id: string; name: string; desc: string }[] 
+}[] = [
   {
     id: 'google',
     name: 'Google Gemini',
     icon: Sparkles,
     color: 'text-blue-400',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
     models: [
       { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', desc: 'Most capable model for complex reasoning and coding.' },
       { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', desc: 'Fastest model for quick research and generation.' },
@@ -31,6 +39,7 @@ const PROVIDERS: { id: AIProvider; name: string; icon: any; color: string; model
     name: 'OpenAI GPT',
     icon: Zap,
     color: 'text-emerald-400',
+    keyUrl: 'https://platform.openai.com/api-keys',
     models: [
       { id: 'gpt-4o', name: 'GPT-4o', desc: 'Flagship multimodal model, balanced and smart.' },
       { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Efficient and affordable for simple tasks.' },
@@ -43,6 +52,7 @@ const PROVIDERS: { id: AIProvider; name: string; icon: any; color: string; model
     name: 'Anthropic Claude',
     icon: Cpu,
     color: 'text-orange-400',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
     models: [
       { id: 'claude-3-5-sonnet-latest', name: 'Claude 3.5 Sonnet', desc: 'Industry-leading intelligence and speed.' },
       { id: 'claude-3-5-haiku-latest', name: 'Claude 3.5 Haiku', desc: 'Ultra-fast, highly capable small model.' },
@@ -54,6 +64,7 @@ const PROVIDERS: { id: AIProvider; name: string; icon: any; color: string; model
     name: 'Meta Llama',
     icon: Globe,
     color: 'text-blue-600',
+    keyUrl: 'https://console.groq.com/keys',
     models: [
       { id: 'llama-3.1-405b', name: 'Llama 3.1 405B', desc: 'Open-weights giant, rivals GPT-4o.' },
       { id: 'llama-3.1-70b', name: 'Llama 3.1 70B', desc: 'Highly capable for most reasoning tasks.' },
@@ -65,6 +76,7 @@ const PROVIDERS: { id: AIProvider; name: string; icon: any; color: string; model
     name: 'Mistral AI',
     icon: Zap,
     color: 'text-yellow-500',
+    keyUrl: 'https://console.mistral.ai/api-keys/',
     models: [
       { id: 'mistral-large-latest', name: 'Mistral Large', desc: 'Top-tier reasoning and multilingual support.' },
       { id: 'mistral-small-latest', name: 'Mistral Small', desc: 'Optimized for low latency and efficiency.' },
@@ -76,6 +88,7 @@ const PROVIDERS: { id: AIProvider; name: string; icon: any; color: string; model
     name: 'DeepSeek',
     icon: Cpu,
     color: 'text-cyan-400',
+    keyUrl: 'https://platform.deepseek.com/api_keys',
     models: [
       { id: 'deepseek-v3', name: 'DeepSeek V3', desc: 'State-of-the-art MoE model for general tasks.' },
       { id: 'deepseek-r1', name: 'DeepSeek R1', desc: 'Specialized in reasoning and complex logic.' },
@@ -120,7 +133,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onSelect }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedProvider !== 'google' && !apiKey) {
+    
+    const isAiStudio = window.location.hostname.includes('run.app') || window.location.hostname.includes('aistudio');
+    const needsKey = selectedProvider !== 'google' && !apiKey;
+    
+    if (needsKey && !isAiStudio) {
       alert('Please enter an API key for this provider.');
       return;
     }
@@ -128,13 +145,13 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onSelect }) => {
     const config: AIConfig = {
       provider: selectedProvider,
       model: selectedModelId,
-      apiKey: selectedProvider === 'google' ? undefined : apiKey,
+      apiKey: apiKey || undefined,
       baseURL: baseURL || undefined
     };
 
     // Save to localStorage
     localStorage.setItem('edu_quest_ai_config', JSON.stringify(config));
-    if (apiKey && selectedProvider !== 'google') {
+    if (apiKey) {
       localStorage.setItem(`edu_quest_api_key_${selectedProvider}`, apiKey);
     }
 
@@ -237,60 +254,72 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onSelect }) => {
               </div>
             </div>
 
-            {selectedProvider !== 'google' && (
+            {/* Show API Key input for all providers */}
+            <div className="space-y-4">
               <div className="space-y-4">
-                <div className="space-y-4">
+                <div className="flex items-center justify-between">
                   <label 
                     htmlFor="api-key-input"
                     className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2"
                   >
                     <Key className="w-3 h-3" />
-                    API Access Key
+                    API Access Key {selectedProvider === 'google' && "(Optional in AI Studio)"}
                   </label>
-                  <div className="relative">
-                    <input
-                      id="api-key-input"
-                      type={showKey ? "text" : "password"}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={`Enter your ${selectedProvider} API key`}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:border-indigo-500 transition-colors"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                  {currentProvider?.keyUrl && (
+                    <a 
+                      href={currentProvider.keyUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
                     >
-                      {showKey ? <Shield className="w-4 h-4" /> : <Key className="w-4 h-4" />}
-                    </button>
-                  </div>
+                      Get API Key
+                      <ChevronRight className="w-3 h-3" />
+                    </a>
+                  )}
                 </div>
-
-                {(selectedProvider === 'meta' || selectedProvider === 'openai') && (
-                  <div className="space-y-4">
-                    <label 
-                      htmlFor="base-url-input"
-                      className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2"
-                    >
-                      <Globe className="w-3 h-3" />
-                      Custom Endpoint (Optional)
-                    </label>
-                    <input
-                      id="base-url-input"
-                      type="text"
-                      value={baseURL}
-                      onChange={(e) => setBaseURL(e.target.value)}
-                      placeholder="https://api.groq.com/openai/v1"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:border-indigo-500 transition-colors"
-                    />
-                  </div>
-                )}
-                
-                <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
-                  Your key is only stored in your browser session and is never sent to our servers.
-                </p>
+                <div className="relative">
+                  <input
+                    id="api-key-input"
+                    type={showKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={`Enter your ${selectedProvider} API key`}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                  >
+                    {showKey ? <Shield className="w-4 h-4" /> : <Key className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-            )}
+
+              {(selectedProvider === 'meta' || selectedProvider === 'openai') && (
+                <div className="space-y-4">
+                  <label 
+                    htmlFor="base-url-input"
+                    className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2"
+                  >
+                    <Globe className="w-3 h-3" />
+                    Custom Endpoint (Optional)
+                  </label>
+                  <input
+                    id="base-url-input"
+                    type="text"
+                    value={baseURL}
+                    onChange={(e) => setBaseURL(e.target.value)}
+                    placeholder="https://api.groq.com/openai/v1"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+              )}
+              
+              <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
+                Your key is only stored in your browser session and is never sent to our servers.
+              </p>
+            </div>
 
             {selectedProvider === 'google' && (
               <div className="p-6 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 space-y-3">
@@ -299,7 +328,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onSelect }) => {
                   <span className="text-[10px] font-black uppercase tracking-widest">Secure Integration</span>
                 </div>
                 <p className="text-xs text-gray-400 font-medium leading-relaxed">
-                  Google Gemini uses the platform's native key management. You will be prompted to select your key in the next step.
+                  Google Gemini can use the platform's native key management or your manual key above.
                 </p>
               </div>
             )}

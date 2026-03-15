@@ -59,7 +59,7 @@ export async function fetchDynamicSyllabus(prefs: UserPreferences): Promise<Syll
   - Use ONLY valid JSON.`;
 
   if (config.provider === 'google') {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: config.apiKey || process.env.API_KEY || process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
       model: config.model,
       contents: prompt,
@@ -195,7 +195,7 @@ export async function generateQuestions(
   let questions: (Question & { needsImage: boolean })[] = [];
 
   if (config.provider === 'google') {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: config.apiKey || process.env.API_KEY || process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
       model: config.model,
       contents: prompt,
@@ -284,7 +284,8 @@ export async function generateQuestions(
 }
 
 async function generateImageForQuestion(text: string, prefs: UserPreferences): Promise<string | undefined> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const config = prefs.aiConfig;
+  const ai = new GoogleGenAI({ apiKey: config?.apiKey || process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3.1-flash-image-preview',
